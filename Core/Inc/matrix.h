@@ -14,18 +14,17 @@ typedef enum {
  * adc_filtered  EMA-smoothed ADC reading. Updated every scan at 4kHz.
  * distance      Physical travel 0–255 (0=rest, 255=3.5mm full press).
  *               Valid once calibration data exists for this key.
- *               Use for rapid trigger: compare consecutive values.
- * extremum      Peak distance reached while DIR_DOWN, or valley while DIR_UP.
+ * extremum      Peak distance while DIR_DOWN, or valley while DIR_UP.
  *               Used by rapid trigger to detect direction reversals.
- * dir           Current movement direction for rapid trigger state machine.
- * is_pressed    Debounced key state. Read by HID layer to build reports. */
+ * dir           Current movement direction for the rapid trigger state machine.
+ * is_pressed    Key state after actuation/RT logic. Read by HID to build reports. */
 typedef struct {
-    uint16_t  adc_filtered;
-    uint8_t   distance;
-    uint8_t   extremum;
+    uint16_t adc_filtered;
+    uint8_t distance;
+    uint8_t extremum;
     key_dir_t dir;
-    bool      is_pressed;
-} key_state_t;
+    bool is_pressed;
+} key_state_t; /* 12 bytes */
 
 extern key_state_t key_matrix[NUM_KEYS];
 

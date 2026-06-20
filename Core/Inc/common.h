@@ -13,9 +13,9 @@
 
 #define NUM_LAYERS   4
 
-#define M_MIN(a, b)        ((a) < (b) ? (a) : (b))
-#define M_MAX(a, b)        ((a) > (b) ? (a) : (b))
+#define M_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define M_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define M_CLAMP(v, lo, hi) (M_MAX((lo), M_MIN((v), (hi))))
-#define M_ARRAY_SIZE(a)    (sizeof(a) / sizeof((a)[0]))
+#define M_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #endif /* COMMON_H */

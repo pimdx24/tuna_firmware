@@ -14,8 +14,10 @@ void keyboard_init(void)
     analog_init();
 
     /* Configure TIM2 for 4kHz: 48MHz timer clock / (48 × 250) = 4000Hz.
-     * Override CubeMX default (2kHz) here so this survives regeneration. */
+     * Override CubeMX defaults here so this survives regeneration.
+     * PSC=47 → div48; ARR=249 → div250; 48MHz/(48×250)=4000Hz. */
     htim2.Init.Prescaler = 47;
+    htim2.Init.Period = 249;
     HAL_TIM_Base_Init(&htim2);
     HAL_TIM_Base_Start_IT(&htim2);
 

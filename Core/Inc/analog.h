@@ -8,8 +8,8 @@
  * periodic noise from USB SOF activity on VDDA. */
 extern volatile uint8_t scan_ready;
 
-void     analog_init(void);
-bool     analog_task(void);      /* full MUX scan if scan_ready; returns true on completion */
+void analog_init(void);
+bool analog_task(void);      /* full MUX scan if scan_ready; returns true on completion */
 uint16_t analog_read(uint8_t key);
 
 #endif /* ANALOG_H */

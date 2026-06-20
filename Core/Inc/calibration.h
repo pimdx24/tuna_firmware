@@ -39,7 +39,7 @@ void calibration_recalibrate(void);
 void calibration_update(uint8_t key, uint16_t adc_filtered);
 
 /* Write calib[] into eeconfig_ram and call eeconfig_save(). Blocks ~1-2s. */
-bool calibration_save(void);
+void calibration_save(void);
 
 /* Load calib[] from eeconfig_ram. Returns false if no valid data in flash. */
 bool calibration_load(void);
