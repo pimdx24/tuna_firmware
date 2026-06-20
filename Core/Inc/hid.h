@@ -1,29 +1,16 @@
 #ifndef HID_H
 #define HID_H
 
-/* HID output stub — implement with TinyUSB.
+/* HID coordinator — delegates to four subsystems:
  *
- * hid_task() processing order (order matters for same-scan correctness):
+ *   usb.h          TinyUSB device stack init and USB callbacks
+ *   hid_keyboard.h standard boot keyboard interface (key reports, layer keys, SOCD)
+ *   hid_config.h   vendor HID interface for web configurator (GET/SET eeconfig)
+ *   socd.h         SOCD keycode resolution, called from hid_keyboard before send
  *
- *   Pass 1 — layer keys:
- *     For each key i with is_pressed changed:
- *       kc = keymap_get_keycode(i)
- *       if KC_IS_LAYER_KEY(kc):
- *         if KC_MO: pressed → keymap_layer_on(kc & 0x0F), released → keymap_layer_off(kc & 0x0F)
- *         if KC_TG: on falling edge → keymap_layer_toggle(kc & 0x0F)
- *
- *   Pass 2 — build report:
- *     For each key i with is_pressed == true:
- *       kc = keymap_get_keycode(i)
- *       if KC_IS_MODIFIER(kc): set modifier byte bit (kc - KC_LCTL)
- *       else if kc != KC_NONE && !KC_IS_LAYER_KEY(kc): add to keycode array
- *
- *   Send report only when it differs from the previous one (debounce host).
- *
- * A second HID interface (custom report) handles the web configurator:
- *   SET_REPORT → write keymap/actuation config into eeconfig_ram, call eeconfig_save()
- *   GET_REPORT → return key_matrix[], calib[], eeconfig_ram snapshot
- * All state (key_matrix, calib, eeconfig_ram, layer_state) is globally accessible. */
+ * hid_init() initialises all four subsystems.
+ * hid_task() drives hid_keyboard_task() and hid_config_task() each 4kHz scan.
+ * usb_task() must be called from the main loop (not here) to pump TinyUSB. */
 
 void hid_init(void);
 void hid_task(void);

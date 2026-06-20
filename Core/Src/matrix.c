@@ -39,6 +39,7 @@ void matrix_scan(void)
 
         const key_actuation_t *act = keymap_get_actuation(i);
 
+        /* TODO: gate RT on eeconfig_ram.rt_enabled — when 0, always take standard branch. */
         if (act->rt_down == 0)
         {
             /* Standard mode: simple threshold */
@@ -48,6 +49,7 @@ void matrix_scan(void)
         else
         {
             /* Rapid trigger: fire on configurable delta from directional extremum.
+             * Only reached when eeconfig_ram.rt_enabled == 1 (see gate TODO below).
              * continuous flag (bit0): key must return to rest (dist=0) to reset;
              *                        when clear, returning past actuation_point resets. */
             uint8_t reset_point = (act->flags & 0x01) ? 0 : act->actuation_point;

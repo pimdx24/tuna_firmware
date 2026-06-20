@@ -61,6 +61,8 @@ static void set_defaults(void)
     eeconfig_ram.magic = EECONFIG_MAGIC;
     eeconfig_ram.version = EECONFIG_VERSION;
     eeconfig_ram.calibrated = 0;
+    eeconfig_ram.rt_enabled = 0;
+    eeconfig_ram.socd_enabled = 0;
 
     for (uint8_t i = 0; i < NUM_KEYS; i++)
     {
