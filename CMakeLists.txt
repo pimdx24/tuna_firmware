@@ -44,12 +44,32 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    # Application
+    Core/Src/analog.c
+    Core/Src/calibration.c
+    Core/Src/eeconfig.c
+    Core/Src/hid.c
+    Core/Src/hid_config.c
+    Core/Src/hid_keyboard.c
+    Core/Src/keyboard.c
+    Core/Src/keymap.c
+    Core/Src/matrix.c
+    Core/Src/socd.c
+    Core/Src/usb.c
+    Core/Src/usb_descriptors.c
+
+    # TinyUSB 0.21.0 device stack (vendored, pruned to device+HID+DWC2)
+    Middlewares/tinyusb/src/tusb.c
+    Middlewares/tinyusb/src/common/tusb_fifo.c
+    Middlewares/tinyusb/src/device/usbd.c
+    Middlewares/tinyusb/src/class/hid/hid_device.c
+    Middlewares/tinyusb/src/portable/synopsys/dwc2/dcd_dwc2.c
+    Middlewares/tinyusb/src/portable/synopsys/dwc2/dwc2_common.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
+    Middlewares/tinyusb/src
 )
 
 # Add project symbols (macros)
@@ -65,4 +85,10 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
 
     # Add user defined libraries
+)
+
+# Flashable images next to the .elf (hex for CubeProgrammer, bin for dfu-util)
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex   $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
 )

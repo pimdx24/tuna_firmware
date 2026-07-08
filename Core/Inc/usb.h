@@ -11,6 +11,11 @@
  * usb_task(): pumps the TinyUSB stack. Must be called from the main() while(1) loop,
  *             NOT from keyboard_task(), as it must run faster than the 4kHz scan. */
 
+/* HID instance numbers — interface order in the configuration descriptor.
+ * Pass to tud_hid_n_*() when sending reports. */
+#define USB_HID_KEYBOARD 0
+#define USB_HID_CONFIG   1
+
 void usb_init(void);
 void usb_task(void);
 
