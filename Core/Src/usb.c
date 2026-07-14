@@ -1,5 +1,6 @@
 #include "usb.h"
 #include "tusb.h"
+#include "hid_config.h"
 #include "stm32f4xx_hal.h"
 
 /* Descriptors live in usb_descriptors.c. The OTG_FS clocks and PA11/PA12
@@ -42,12 +43,13 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
 
 /* Host sends a report.
  * USB_HID_KEYBOARD OUTPUT report = LED state (Caps Lock etc.) — phase 3.
- * USB_HID_CONFIG   OUT report    = configurator command      — phase 5,
- * route to hid_config. */
+ * USB_HID_CONFIG   OUT report    = configurator command, routed to hid_config.
+ * Raw-HID OUT data arrives with report_id 0 / report_type INVALID. */
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type,
                            uint8_t const *buffer, uint16_t bufsize)
 {
-    (void)instance; (void)report_id; (void)report_type;
-    (void)buffer; (void)bufsize;
+    (void)report_id; (void)report_type;
+    if (instance == USB_HID_CONFIG)
+        hid_config_rx(buffer, bufsize);
 }
