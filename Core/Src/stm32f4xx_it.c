@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "analog.h"
+#include "tusb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -217,5 +218,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM2)
         scan_ready = 1;
+}
+
+/* USB OTG FS global interrupt — TinyUSB owns the peripheral (see usb.c). */
+void OTG_FS_IRQHandler(void)
+{
+    tud_int_handler(0);
 }
 /* USER CODE END 1 */

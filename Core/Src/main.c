@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "keyboard.h"
+#include "usb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -108,7 +109,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    keyboard_task();
+    usb_task();      /* pump TinyUSB every iteration — must outpace the 4kHz scan */
+    keyboard_task(); /* runs one scan per 250µs tick, else returns immediately */
   }
   /* USER CODE END 3 */
 }

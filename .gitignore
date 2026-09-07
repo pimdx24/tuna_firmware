@@ -1,0 +1,12 @@
+# Build output
+/build/
+
+# Flashable images / map files (generated post-build)
+*.hex
+*.bin
+*.map
+*.list
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
