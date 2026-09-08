@@ -21,6 +21,12 @@
  * Chosen to integrate over USB 12MHz noise: 625ns ≈ 7.5 bit periods. */
 #define ADC_SAMPLE_TIME ADC_SAMPLETIME_15CYCLES
 
+/* Upper bound on the end-of-conversion wait. One conversion is 15 + 12 ADC
+ * clocks = 1.125µs at 24MHz, so 20µs is never reached in normal operation.
+ * It only keeps a hardware fault (ADC clock lost, peripheral reset) from
+ * freezing the scan loop forever; on timeout the previous value is kept. */
+#define ADC_EOC_TIMEOUT_US 20U
+
 #define NUM_MUX      9
 #define MUX_CHANNELS 8
 
@@ -55,6 +61,7 @@ static const uint8_t sensor_map[NUM_MUX][MUX_CHANNELS] = {
 
 static uint16_t adc_values[NUM_KEYS];
 static uint32_t settle_ticks;
+static uint32_t eoc_timeout_ticks;
 
 volatile uint8_t scan_ready;
 
@@ -74,24 +81,61 @@ static void mux_select(uint8_t ch)
     delay_ticks(settle_ticks);
 }
 
-static uint16_t adc_read(uint32_t channel)
+/* Single software-triggered conversion on one regular channel.
+ *
+ * Register-level on purpose: the HAL ConfigChannel/Start/PollForConversion
+ * trio costs several µs per call at -O0, which multiplied by 61 keys does not
+ * fit the 250µs scan period. The ADC is already enabled (analog_init) with
+ * sample times programmed for every channel, so a conversion only needs the
+ * rank-1 sequencer slot rewritten and SWSTART set.
+ *
+ * SQR3[4:0] = channel for rank 1 (ADC_CHANNEL_x are plain channel numbers,
+ * SQR1.L = 0 → single conversion). Reading DR clears EOC. */
+static uint16_t adc_read(uint32_t channel, uint16_t fallback)
 {
-    static ADC_ChannelConfTypeDef cfg = {
-        .Rank = 1,
-        .SamplingTime = ADC_SAMPLE_TIME,
-    };
-    cfg.Channel = channel;
-    HAL_ADC_ConfigChannel(&hadc1, &cfg);
-    HAL_ADC_Start(&hadc1);
-    HAL_ADC_PollForConversion(&hadc1, 1);
-    return (uint16_t)HAL_ADC_GetValue(&hadc1);
+    ADC_TypeDef *adc = hadc1.Instance;
+
+    adc->SR = ~(uint32_t)(ADC_SR_EOC | ADC_SR_OVR);   /* rc_w0: clear stale flags */
+    adc->SQR3 = channel;
+    adc->CR2 |= ADC_CR2_SWSTART;
+
+    uint32_t start = DWT->CYCCNT;
+    while ((adc->SR & ADC_SR_EOC) == 0U)
+    {
+        if ((DWT->CYCCNT - start) > eoc_timeout_ticks)
+            return fallback;
+    }
+    return (uint16_t)adc->DR;
 }
 
 void analog_init(void)
 {
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-    settle_ticks = MUX_SETTLE_US * (SystemCoreClock / 1000000U);
+
+    uint32_t ticks_per_us = SystemCoreClock / 1000000U;
+    settle_ticks      = MUX_SETTLE_US * ticks_per_us;
+    eoc_timeout_ticks = ADC_EOC_TIMEOUT_US * ticks_per_us;
+
+    /* Sample time lives in the per-channel SMPRx fields: program it once for
+     * all nine mux outputs. HAL_ADC_ConfigChannel also writes the rank-1
+     * slot, which adc_read() rewrites per conversion. */
+    ADC_ChannelConfTypeDef cfg = {
+        .Rank = 1,
+        .SamplingTime = ADC_SAMPLE_TIME,
+    };
+    for (uint8_t m = 0; m < NUM_MUX; m++)
+    {
+        cfg.Channel = mux_adc_channels[m];
+        HAL_ADC_ConfigChannel(&hadc1, &cfg);
+    }
+
+    /* One HAL-driven dummy conversion: sets ADON, waits the stabilisation
+     * time, and leaves the ADC enabled with EOC clear. Every conversion
+     * after this goes through adc_read() at register level. */
+    HAL_ADC_Start(&hadc1);
+    HAL_ADC_PollForConversion(&hadc1, 1);
+    (void)HAL_ADC_GetValue(&hadc1);
 }
 
 bool analog_task(void)
@@ -106,7 +150,7 @@ bool analog_task(void)
         {
             uint8_t key = sensor_map[m][ch];
             if (key == NO_KEY) continue;
-            adc_values[key] = adc_read(mux_adc_channels[m]);
+            adc_values[key] = adc_read(mux_adc_channels[m], adc_values[key]);
         }
     }
     return true;

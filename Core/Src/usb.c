@@ -1,6 +1,7 @@
 #include "usb.h"
 #include "tusb.h"
 #include "hid_config.h"
+#include "hid_keyboard.h"
 #include "stm32f4xx_hal.h"
 
 /* Descriptors live in usb_descriptors.c. The OTG_FS clocks and PA11/PA12
@@ -24,6 +25,13 @@ void usb_init(void)
 void usb_task(void)
 {
     tud_task();
+}
+
+/* Host applied SET_CONFIGURATION (initial enumeration or re-enumeration).
+ * The host now assumes all keys are up; resync the keyboard's sent state. */
+void tud_mount_cb(void)
+{
+    hid_keyboard_usb_reset();
 }
 
 /* -------------------------------------------------------------------------

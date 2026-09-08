@@ -5,21 +5,33 @@
 
 key_calib_t calib[NUM_KEYS];
 
+_Static_assert(CALIBRATION_SETTLE_MS < CALIBRATION_DURATION_MS,
+               "settle window must leave time to track the minimum");
+
+/* Measure rest_value for every key (all keys assumed at rest) and seed
+ * bottom_out_value. Requires TIM2 running (analog_task needs scan_ready). */
 static void run_boot_calibration(void)
 {
-    uint16_t ema[NUM_KEYS];
+    /* Same 12.4 fixed-point EMA as matrix.c (acc = 16 × filtered) so the
+     * rest value is measured with exactly the filter used at runtime. */
+    uint32_t acc[NUM_KEYS];
     for (uint8_t i = 0; i < NUM_KEYS; i++)
-        ema[i] = analog_read(i);
+    {
+        acc[i] = (uint32_t)analog_read(i) << 4;
+        calib[i].rest_value = ADC_MAX;   /* min-tracked below, after settling */
+    }
 
     uint32_t start = HAL_GetTick();
     while (HAL_GetTick() - start < CALIBRATION_DURATION_MS)
     {
         if (!analog_task()) continue;
+        bool settled = (HAL_GetTick() - start) >= CALIBRATION_SETTLE_MS;
         for (uint8_t i = 0; i < NUM_KEYS; i++)
         {
-            ema[i] = (uint16_t)(((uint32_t)analog_read(i) + (uint32_t)ema[i] * 15U) >> 4);
-            if (ema[i] < calib[i].rest_value)
-                calib[i].rest_value = ema[i];
+            acc[i] = acc[i] + analog_read(i) - (acc[i] >> 4);
+            uint16_t filtered = (uint16_t)(acc[i] >> 4);
+            if (settled && filtered < calib[i].rest_value)
+                calib[i].rest_value = filtered;
         }
     }
 
@@ -35,12 +47,6 @@ void calibration_init(void)
 
     if (calibration_load()) return;
 
-    for (uint8_t i = 0; i < NUM_KEYS; i++)
-    {
-        calib[i].rest_value = analog_read(i);
-        calib[i].bottom_out_value = calib[i].rest_value + INITIAL_BOTTOM_OUT_THRESHOLD;
-    }
-
     run_boot_calibration();
     calibration_save();
 }
@@ -48,12 +54,6 @@ void calibration_init(void)
 void calibration_recalibrate(void)
 {
     while (!analog_task()) {}
-
-    for (uint8_t i = 0; i < NUM_KEYS; i++)
-    {
-        calib[i].rest_value = analog_read(i);
-        calib[i].bottom_out_value = calib[i].rest_value + INITIAL_BOTTOM_OUT_THRESHOLD;
-    }
 
     run_boot_calibration();
     calibration_save();

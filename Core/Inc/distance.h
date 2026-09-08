@@ -14,12 +14,16 @@
  *
  * Deadband: 0.1mm / 3.5mm × 255 ≈ 7 distance units at each end.
  * Readings within 7 units of rest → 0. Within 7 units of bottom → 255.
- * This prevents false triggers from sensor noise at travel limits. */
+ * This prevents false triggers from sensor noise at travel limits.
+ * Additionally, readings within REST_NOISE_COUNTS ADC counts of rest → 0,
+ * which keeps the rest deadband meaningful when the calibrated swing is
+ * small (see common.h). */
 static inline uint8_t adc_to_distance(uint16_t adc,
                                        uint16_t rest,
                                        uint16_t bottom_out)
 {
     if (adc <= rest || rest >= bottom_out) return 0;
+    if ((uint16_t)(adc - rest) < REST_NOISE_COUNTS) return 0;
     if (adc >= bottom_out) return DISTANCE_MAX;
 
     uint8_t d = (uint8_t)((uint32_t)(adc - rest) * DISTANCE_MAX
