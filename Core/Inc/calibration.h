@@ -3,16 +3,33 @@
 
 #include "common.h"
 
-/* Initial bottom-out threshold: ADC counts above rest representing a full 3.5mm press.
- * Tune after first hardware measurement. The dynamic tracker in calibration_update()
- * corrects this upward as keys are pressed during normal use. */
-#define INITIAL_BOTTOM_OUT_THRESHOLD 400U
+/* Initial bottom-out seed: ADC counts above rest assumed for a full 3.5mm press
+ * until the key has actually been bottomed out once.
+ *
+ * This MUST be a LOWER bound of the real swing. calibration_update() only ever
+ * raises bottom_out_value (it tracks the deepest reading seen), so a seed above
+ * the real swing is never corrected and keys can never reach the actuation
+ * point. A seed below the real swing is corrected the first time each key is
+ * pressed fully; until then that key reads deeper than it really is (a partial
+ * press can register as 255), which is a transient, not a lock-out.
+ *
+ * Confirm against the GET calib (0x06) readout on the first board: the
+ * learned bottom_out - rest of a fully pressed key is the real swing, and this
+ * seed should sit comfortably below it. */
+#define INITIAL_BOTTOM_OUT_THRESHOLD 150U
 
 /* Boot calibration: 500ms of EMA filtering with all keys at rest.
  * Tracks the minimum filtered ADC per key → rest_value.
  * Minimum tracking means accidental presses during boot are harmless
- * (pressing raises ADC, which does not update the minimum). */
+ * (pressing raises ADC, which does not update the minimum).
+ *
+ * The first CALIBRATION_SETTLE_MS are excluded from the minimum: the filter
+ * is seeded from one raw sample, so until it has settled its output carries
+ * that sample's noise (up to the full raw noise amplitude), which would bias
+ * rest_value low and let rest noise leak through as non-zero distance.
+ * 50ms = 200 samples ≈ 13 filter time constants. */
 #define CALIBRATION_DURATION_MS 500U
+#define CALIBRATION_SETTLE_MS   50U
 
 /* Minimum ADC change above current bottom_out to trigger a dynamic update.
  * Prevents noise from incrementally walking bottom_out upward. */

@@ -49,10 +49,16 @@ static uint16_t tx_len;  /* payload bytes queued; 0 = idle */
 static uint16_t tx_sent; /* payload bytes already sent */
 static uint8_t  tx_cmd;
 
-/* Incoming (host -> device) reassembly for SET commands. */
+/* Incoming (host -> device) reassembly for SET commands.
+ * rx_mask tracks which chunks have arrived so a transfer only completes when
+ * every chunk is present — the last packet alone must not commit stale bytes
+ * left in rx_buf by an earlier transfer. */
+#define MAX_CHUNKS ((MAX_PAYLOAD + CHUNK - 1) / CHUNK) /* 8 */
+_Static_assert(MAX_CHUNKS <= 16, "rx_mask is 16 bits");
+
 static uint8_t  rx_buf[MAX_PAYLOAD];
 static uint16_t rx_expected; /* total payload bytes; 0 = not receiving */
-static uint16_t rx_got;
+static uint16_t rx_mask;     /* bit n set = chunk n received */
 static uint8_t  rx_cmd;
 
 /* Deferred action + terminal ACK. */
@@ -65,7 +71,7 @@ void hid_config_init(void)
     tx_len = 0;
     tx_sent = 0;
     rx_expected = 0;
-    rx_got = 0;
+    rx_mask = 0;
     pending = ACT_NONE;
     ack_pending = false;
 }
@@ -144,19 +150,21 @@ void hid_config_rx(const uint8_t *report, uint16_t len)
         if (seq == 0) {
             rx_cmd = cmd;
             rx_expected = set_sz;
-            rx_got = 0;
+            rx_mask = 0;
         }
         if (rx_expected == 0 || cmd != rx_cmd) return; /* stray / out of sync */
         uint16_t off = (uint16_t)seq * CHUNK;
-        if (off >= rx_expected) return;
+        if (off >= rx_expected) return;                 /* seq beyond payload */
         uint16_t n = rx_expected - off;
         if (n > CHUNK) n = CHUNK;
-        if ((uint16_t)(len - HEADER) < n) n = (uint16_t)(len - HEADER);
+        if ((uint16_t)(len - HEADER) < n) return;       /* short packet: discard */
         memcpy(rx_buf + off, report + HEADER, n);
-        rx_got = off + n;
-        if (rx_got >= rx_expected) {
+        rx_mask |= (uint16_t)(1U << seq);
+        uint16_t nchunks = (rx_expected + CHUNK - 1) / CHUNK;
+        if (rx_mask == (uint16_t)((1U << nchunks) - 1U)) {
             apply_set(rx_cmd, rx_buf);
             rx_expected = 0;
+            rx_mask = 0;
         }
         return;
     }
