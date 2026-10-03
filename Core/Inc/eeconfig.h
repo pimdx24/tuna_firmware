@@ -4,7 +4,7 @@
 #include "common.h"
 
 #define EECONFIG_MAGIC   0x544B4248U /* "TBKH" */
-#define EECONFIG_VERSION 0x0005U
+#define EECONFIG_VERSION 0x0006U
 
 #define DEFAULT_ACTUATION_POINT 128U /* ~1.75mm default actuation depth */
 
@@ -39,7 +39,11 @@ typedef struct {
  *                     [0] base QWERTY — normal actuation
  *                     [1] Fn momentary overlay
  *                     [2] user-defined layer 2 (web configurator)
- *                     [3] user-defined layer 3 (web configurator) */
+ *                     [3] user-defined layer 3 (web configurator)
+ * crc               CRC-32 over every byte between magic and crc. Together with
+ *                   magic being programmed last, a save interrupted by power
+ *                   loss (mid-erase or mid-write) fails validation at the next
+ *                   boot and the store falls back to defaults. */
 typedef struct {
     uint32_t magic;
     uint32_t version;
@@ -51,10 +55,11 @@ typedef struct {
     uint16_t bottom_out_value[NUM_KEYS];
     key_actuation_t actuation_map[NUM_KEYS];
     uint16_t keymap[NUM_LAYERS][NUM_KEYS];
+    uint32_t crc;
 } eeconfig_t;
 
-/* 4+4+4+1+1+2 + 61×2 + 61×2 + 61×4 + 4×61×2 = 992 bytes = 248 words */
-_Static_assert(sizeof(eeconfig_t) == 992,
+/* 4+4+4+1+1+2 + 61×2 + 61×2 + 61×4 + 4×61×2 + 4 = 996 bytes = 249 words */
+_Static_assert(sizeof(eeconfig_t) == 996,
                "eeconfig_t size mismatch — update EECONFIG_VERSION and this assert");
 _Static_assert(sizeof(eeconfig_t) % 4 == 0,
                "eeconfig_t must be word-aligned for flash writes");
@@ -64,7 +69,9 @@ _Static_assert(sizeof(eeconfig_t) % 4 == 0,
 extern eeconfig_t eeconfig_ram;
 
 void eeconfig_init(void);  /* load from flash or reset to defaults */
-void eeconfig_save(void);  /* erase sector 7, write eeconfig_ram — blocks ~1-2s */
+void eeconfig_save(void);  /* erase sector 7, write eeconfig_ram — blocks ~1-2s.
+                              * On a flash error the RAM copy stays in use and
+                              * the next boot falls back to defaults. */
 void eeconfig_reset(void); /* restore defaults and save */
 
 #endif /* EECONFIG_H */

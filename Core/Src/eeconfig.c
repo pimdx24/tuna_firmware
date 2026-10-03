@@ -2,11 +2,36 @@
 #include "keymap.h"
 #include "main.h"
 #include "stm32f4xx_hal.h"
+#include <stddef.h>
 
 #define FLASH_SECTOR FLASH_SECTOR_7
 #define FLASH_ADDR   0x08060000U
 
+/* Every flash error flag the F4 can latch. A flag left set by an earlier
+ * operation (e.g. the debugger's own programming) makes the HAL's
+ * pre-operation status check fail the next erase/program. */
+#define FLASH_ERROR_FLAGS (FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | \
+                           FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR)
+
+/* magic is word 0 and is programmed last by eeconfig_save(). */
+_Static_assert(offsetof(eeconfig_t, magic) == 0, "magic must be the first word");
+
 eeconfig_t eeconfig_ram;
+
+/* CRC-32 (IEEE 802.3, reflected) over the bytes between magic and crc. */
+static uint32_t eeconfig_crc(const eeconfig_t *cfg)
+{
+    const uint8_t *p = (const uint8_t *)cfg + sizeof(cfg->magic);
+    size_t len = offsetof(eeconfig_t, crc) - sizeof(cfg->magic);
+    uint32_t crc = 0xFFFFFFFFU;
+    while (len--)
+    {
+        crc ^= *p++;
+        for (uint8_t b = 0; b < 8; b++)
+            crc = (crc >> 1) ^ (0xEDB88320U & -(crc & 1U));
+    }
+    return ~crc;
+}
 
 /* Default keymaps:
  *   Layer 0: standard 60% ANSI QWERTY — the base keymap, normal actuation.
@@ -80,7 +105,8 @@ static void set_defaults(void)
 void eeconfig_init(void)
 {
     const eeconfig_t *flash = (const eeconfig_t *)FLASH_ADDR;
-    if (flash->magic == EECONFIG_MAGIC && flash->version == EECONFIG_VERSION)
+    if (flash->magic == EECONFIG_MAGIC && flash->version == EECONFIG_VERSION &&
+        flash->crc == eeconfig_crc(flash))
     {
         eeconfig_ram = *flash;
         return;
@@ -88,9 +114,19 @@ void eeconfig_init(void)
     eeconfig_reset();
 }
 
+/* Power-loss safety: the sector only validates once magic (word 0) is
+ * written, and magic is the last word programmed. Power lost mid-erase or
+ * mid-write leaves magic erased or the CRC wrong, so the next boot loads
+ * defaults and recalibrates rather than a half-written config.
+ *
+ * A flash error is not fatal: the keyboard keeps running from eeconfig_ram,
+ * and the partially written sector fails validation at the next boot. */
 void eeconfig_save(void)
 {
+    eeconfig_ram.crc = eeconfig_crc(&eeconfig_ram);
+
     HAL_FLASH_Unlock();
+    __HAL_FLASH_CLEAR_FLAG(FLASH_ERROR_FLAGS);
 
     FLASH_EraseInitTypeDef erase = {
         .TypeErase    = FLASH_TYPEERASE_SECTORS,
@@ -102,21 +138,19 @@ void eeconfig_save(void)
     if (HAL_FLASHEx_Erase(&erase, &error) != HAL_OK || error != 0xFFFFFFFFU)
     {
         HAL_FLASH_Lock();
-        Error_Handler();
         return;
     }
 
     const uint32_t *src = (const uint32_t *)&eeconfig_ram;
-    uint32_t addr = FLASH_ADDR;
-    for (uint32_t i = 0; i < sizeof(eeconfig_t) / 4; i++)
+    const uint32_t nwords = sizeof(eeconfig_t) / 4;
+    for (uint32_t i = 1; i <= nwords; i++)
     {
-        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, src[i]) != HAL_OK)
+        uint32_t w = i % nwords; /* words 1..n-1, then magic (word 0) last */
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, FLASH_ADDR + w * 4U, src[w]) != HAL_OK)
         {
             HAL_FLASH_Lock();
-            Error_Handler();
             return;
         }
-        addr += 4;
     }
 
     HAL_FLASH_Lock();
